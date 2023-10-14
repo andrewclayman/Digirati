@@ -118,4 +118,4 @@ def handle_bad_request(error):
     return jsonify({"error": "Bad Request: Please ensure the provided data is in the correct format."}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
