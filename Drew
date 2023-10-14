@@ -11,14 +11,14 @@ INVALID_NAMES = ["LIMITED WARRANTY", "Gutenberg"]
 recognized_people = set()
 recognized_places = set()
 
-#Helper function to filter out known non-person entities
+# Helper function to filter out known non-person entities
 def is_valid_person(name: str) -> bool:
     for keyword in INVALID_NAMES:
         if keyword in name:
             return False
     return True
 
-#Ensure consistency in recognizing certain entities as people
+# Ensure consistency in recognizing certain entities as people
 def consistent_person_recognition(text, doc):
     # Add entities to recognized sets based on their current label
     for ent in doc.ents:
