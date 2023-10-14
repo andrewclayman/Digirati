@@ -1,0 +1,121 @@
+from flask import Flask, request, jsonify
+import spacy
+import requests
+from werkzeug.exceptions import BadRequest
+from spacy.language import Language
+
+nlp = spacy.load("en_core_web_lg")
+
+INVALID_NAMES = ["LIMITED WARRANTY", "Gutenberg"]
+
+recognized_people = set()
+recognized_places = set()
+
+#Helper function to filter out known non-person entities
+def is_valid_person(name: str) -> bool:
+    for keyword in INVALID_NAMES:
+        if keyword in name:
+            return False
+    return True
+
+#Ensure consistency in recognizing certain entities as people
+def consistent_person_recognition(text, doc):
+    # Add entities to recognized sets based on their current label
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            recognized_people.add(ent.text)
+        elif ent.label_ == "GPE":
+            recognized_places.add(ent.text)
+
+    # Iterate through entities again to determine final label
+    new_ents = []
+    for ent in doc.ents:
+        if ent.text in recognized_people:
+            # If ever seen as person, make sure always a person
+            new_ent = spacy.tokens.Span(doc, ent.start, ent.end, label="PERSON")
+            new_ents.append(new_ent)
+        else:
+            # Keep the original entity
+            new_ents.append(ent)
+
+    doc.ents = new_ents
+    return doc
+
+# spaCy component to remove possessive form of people
+@Language.component("preprocess_text")
+def preprocess_text(doc):
+    modified_text = doc.text.replace("'s", "")
+    return nlp.make_doc(modified_text)
+
+nlp.add_pipe("preprocess_text", before='ner')
+
+app = Flask(__name__)
+
+# Ensure ordering stays the same
+app.config['JSON_SORT_KEYS'] = False
+
+@app.route('/analyse', methods=['POST'])
+def analyze_text():
+    data = request.json
+
+    # Check if URL is provided
+    if not data or 'URL' not in data:
+        return jsonify({"error": "URL key missing in request"}), 400
+
+    url = data['URL']
+    try:
+        response = requests.get(url)
+        text = response.text
+        doc = nlp(text)
+        doc = consistent_person_recognition(text, doc)
+    except:
+        return jsonify({"error": "Failed to fetch or process the document at the given URL"}), 400
+
+    # Identify people
+    people = {}
+    for ent in doc.ents:
+        ent_text = ent.text.replace("\r\n", " ").replace("\n", " ")
+
+        if ent.label_ == "PERSON" and is_valid_person(ent_text):
+            if ent_text not in people:
+                people[ent_text] = {
+                    "count": 0,
+                    "associated_places": {}
+                }
+            people[ent_text]["count"] += 1
+
+            # Check for associated places
+            start = max(ent.start - 100, 0)
+            end = min(ent.end + 100, len(doc))
+            snippet = doc[start:end]
+            for place in snippet.ents:
+                place_text = place.text.replace("\r\n", " ").replace("\n", " ")
+                if place.label_ == "GPE":
+                    if place_text not in people[ent_text]["associated_places"]:
+                        people[ent_text]["associated_places"][place_text] = 0
+                    people[ent_text]["associated_places"][place_text] += 1
+
+    # Convert to required format
+    people_list = [{
+        "name": name,
+        "count": details["count"],
+        "associated_places": [{"name": place, "count": count} for place, count in details["associated_places"].items()]
+    } for name, details in people.items()]
+
+    people_list.sort(key=lambda x: x["count"], reverse=True)
+    for person in people_list:
+        person["associated_places"].sort(key=lambda x: x["count"], reverse=True)
+
+    # Preserve the metadata in the order it was received and add the processed people data
+    response = {key: data[key] for key in data if key != "URL"}
+    response["url"] = url
+    response["people"] = people_list
+
+    return jsonify(response)
+
+@app.errorhandler(400)
+def handle_bad_request(error):
+    return jsonify({"error": "Bad Request: Please ensure the provided data is in the correct format."}), 400
+
+if __name__ == '__main__':
+    app.run(debug=True)
