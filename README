@@ -1,0 +1,56 @@
+Text Analysis API
+This is a Flask-based API that processes given text to identify and categorize named entities, specifically 
+people and associated places. It utilizes the NLP capabilities provided by Spacy.
+
+Prerequisites
+Python 3.x
+Flask
+Spacy
+
+Installation
+Clone this repository:
+
+git clone https://github.com/andrewclayman/Digirati.git
+
+Navigate to the project directory:
+
+cd Digirati
+
+Install the required dependencies:
+
+pip install flask spacy
+
+Usage
+To run the API locally:
+
+Start the Flask server:
+
+python Drew.py
+The API should be running at http://localhost:5000. Navigate to the /analyse endpoint to interact with the text analysis capabilities.
+
+API Endpoints
+POST /analyse: Process a provided text to identify and categorise named entities.
+
+Request Body:
+
+{
+   "URL": "[URL of the text/document to be analysed]"
+}
+
+Response:
+
+{
+   "url": "[Processed URL]",
+   "people": [
+       {
+           "name": "[Person's Name]",
+           "count": [Occurrence Count],
+           "associated_places": [
+               {
+                   "name": "[Place Name]",
+                   "count": [Occurrence Count]
+               }
+           ]
+       }
+   ]
+}
